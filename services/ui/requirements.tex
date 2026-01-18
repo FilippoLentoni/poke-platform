@@ -1,0 +1,25 @@
+\documentclass{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+\title{UI Service Dependencies}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section*{Overview}
+The UI service lists two Python dependencies in \texttt{requirements.txt}. These
+packages power the web interface and outbound HTTP calls.
+
+\section*{Dependencies}
+\begin{itemize}
+  \item \texttt{streamlit==1.37.1}: Provides the Streamlit framework used to
+  render the UI and handle interactive widgets.
+  \item \texttt{requests==2.32.3}: Provides HTTP client utilities for calling
+  external APIs from the UI service.
+\end{itemize}
+
+\end{document}

@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# CDK
+infra/cdk/.venv/
+infra/cdk/cdk.out/
+
+# OS/Editor
+.DS_Store
+.vscode/
+
+# Secrets (never commit)
+.env
+*.pem
