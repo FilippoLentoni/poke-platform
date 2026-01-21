@@ -29,19 +29,24 @@ esac
 
 rule_name="$(aws_cmd cloudformation list-stack-resources \
   --stack-name "$STACK" \
-  --query "StackResourceSummaries[?LogicalResourceId=='${logical_rule}'].PhysicalResourceId | [0]" \
-  --output text)"
+  --output json \
+  | jq -r ".StackResourceSummaries[] | select(.LogicalResourceId==\"${logical_rule}\") | .PhysicalResourceId" \
+  | head -n1 \
+  | tr -d '\r' \
+  | xargs)"
 
 if [[ -z "$rule_name" || "$rule_name" == "None" ]]; then
-  echo "Rule not found for $task (logical: $logical_rule)."
+  echo "Rule not found for $task (logical: $logical_rule) in stack $STACK."
   exit 1
 fi
 
+echo "Resolved RULE_NAME: $rule_name"
+
 cluster_arn="$(aws_cmd events list-targets-by-rule --rule "$rule_name" --query "Targets[0].Arn" --output text)"
 task_def="$(aws_cmd events list-targets-by-rule --rule "$rule_name" --query "Targets[0].EcsParameters.TaskDefinitionArn" --output text)"
-subnets="$(aws_cmd events list-targets-by-rule --rule "$rule_name" --query "Targets[0].EcsParameters.NetworkConfiguration.AwsVpcConfiguration.Subnets" --output text)"
-security_groups="$(aws_cmd events list-targets-by-rule --rule "$rule_name" --query "Targets[0].EcsParameters.NetworkConfiguration.AwsVpcConfiguration.SecurityGroups" --output text)"
-assign_public_ip="$(aws_cmd events list-targets-by-rule --rule "$rule_name" --query "Targets[0].EcsParameters.NetworkConfiguration.AwsVpcConfiguration.AssignPublicIp" --output text)"
+subnets="$(aws_cmd events list-targets-by-rule --rule "$rule_name" --query "Targets[0].EcsParameters.NetworkConfiguration.awsvpcConfiguration.Subnets" --output text)"
+security_groups="$(aws_cmd events list-targets-by-rule --rule "$rule_name" --query "Targets[0].EcsParameters.NetworkConfiguration.awsvpcConfiguration.SecurityGroups" --output text)"
+assign_public_ip="$(aws_cmd events list-targets-by-rule --rule "$rule_name" --query "Targets[0].EcsParameters.NetworkConfiguration.awsvpcConfiguration.AssignPublicIp" --output text)"
 
 if [[ -z "$cluster_arn" || "$cluster_arn" == "None" ]]; then
   echo "Cluster ARN not found from rule target."
@@ -49,6 +54,11 @@ if [[ -z "$cluster_arn" || "$cluster_arn" == "None" ]]; then
 fi
 if [[ -z "$task_def" || "$task_def" == "None" ]]; then
   echo "Task definition not found from rule target."
+  exit 1
+fi
+if [[ -z "$subnets" || "$subnets" == "None" || -z "$security_groups" || "$security_groups" == "None" || -z "$assign_public_ip" || "$assign_public_ip" == "None" ]]; then
+  echo "Network configuration missing from rule target. Full target JSON:"
+  aws_cmd events list-targets-by-rule --rule "$rule_name" --output json
   exit 1
 fi
 
