@@ -84,4 +84,44 @@ Even if you keep a natural-language brief:
 
 ---
 
+## Ops / Debugging
+
+### Verify EventBridge rules + metrics
+```bash
+REGION=us-east-2 STACK=PokePlatformStack ./scripts/verify_pipeline.sh
+```
+
+### Drill into EventBridge failures + ECS events
+```bash
+REGION=us-east-2 STACK=PokePlatformStack ./scripts/debug_eventbridge_ecs.sh
+```
+
+### Force-run a task (bypass EventBridge)
+```bash
+REGION=us-east-2 STACK=PokePlatformStack ./scripts/run_task_manual.sh universe_updater
+REGION=us-east-2 STACK=PokePlatformStack ./scripts/run_task_manual.sh price_extractor
+REGION=us-east-2 STACK=PokePlatformStack ./scripts/run_task_manual.sh strategy_runner
+REGION=us-east-2 STACK=PokePlatformStack ./scripts/run_task_manual.sh proposal_generator
+```
+
+### Check ECS tasks + exit codes
+```bash
+aws ecs list-tasks --cluster <cluster-arn> --desired-status STOPPED --max-items 50
+aws ecs describe-tasks --cluster <cluster-arn> --tasks <task-arn>
+```
+
+### DB sanity checks
+```bash
+psql -f scripts/db_checks.sql
+```
+
+### Tail logs for components
+```bash
+REGION=us-east-2 ./scripts/tail_logs.sh universe_updater
+REGION=us-east-2 ./scripts/tail_logs.sh price_extractor
+REGION=us-east-2 ./scripts/tail_logs.sh strategy_runner
+REGION=us-east-2 ./scripts/tail_logs.sh proposal_generator
+REGION=us-east-2 ./scripts/tail_logs.sh api
+REGION=us-east-2 ./scripts/tail_logs.sh ui
+```
 
