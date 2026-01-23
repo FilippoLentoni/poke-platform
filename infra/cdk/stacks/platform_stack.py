@@ -169,6 +169,8 @@ class PlatformStack(Stack):
                 "DB_PORT": str(db.db_instance_endpoint_port),
                 "DB_NAME": "poke",
                 "DB_USER": "pokeadmin",
+                "STRATEGY_NAME": "exp_smoothing_v1",
+                "STRATEGY_VERSION": "v1",
             },
             secrets={
                 "DB_PASSWORD": ecs.Secret.from_secrets_manager(db.secret, field="password"),
