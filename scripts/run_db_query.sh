@@ -10,15 +10,18 @@ aws_cmd() {
 }
 
 usage() {
-  echo "Usage: $0 (-f <sql_file> | -q <sql>)"
+  echo "Usage: $0 (-f <sql_file> | -q <sql>) [--csv] [--quiet]"
   echo "Examples:"
   echo "  $0 -q \"SELECT COUNT(*) FROM tracked_asset WHERE is_active=true;\""
   echo "  $0 -f scripts/db_checks.sql"
   echo "  cat queries.sql | $0 -f -"
+  echo "  $0 --csv --quiet -q \"SELECT * FROM tracked_asset LIMIT 5;\""
 }
 
 sql_content=""
 sql_source=""
+output_format=""
+quiet=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -29,6 +32,14 @@ while [[ $# -gt 0 ]]; do
     -q|--query)
       sql_content="$2"
       shift 2
+      ;;
+    --csv)
+      output_format="csv"
+      shift
+      ;;
+    --quiet)
+      quiet=1
+      shift
       ;;
     -h|--help)
       usage
@@ -60,6 +71,15 @@ if [[ -z "$sql_content" ]]; then
   exit 1
 fi
 
+if [[ "$output_format" == "csv" ]]; then
+  if [[ -n "$sql_source" ]]; then
+    echo "--csv is only supported with -q/--query."
+    exit 1
+  fi
+  sql_content="$(printf '%s' "$sql_content" | tr '\n' ' ' | tr '\t' ' ' | sed -e 's/[[:space:]]*$//' -e 's/;[[:space:]]*$//')"
+  sql_content="\\copy (${sql_content}) TO STDOUT WITH CSV HEADER;"
+fi
+
 if command -v base64 >/dev/null 2>&1; then
   sql_b64="$(printf '%s' "$sql_content" | base64 -w 0)"
 elif command -v python3 >/dev/null 2>&1; then
@@ -75,8 +95,10 @@ else
   exit 1
 fi
 
-echo "Region: $REGION"
-echo "Stack:  $STACK"
+if [[ "$quiet" -ne 1 ]]; then
+  echo "Region: $REGION"
+  echo "Stack:  $STACK"
+fi
 
 cluster_arn="$(aws_cmd cloudformation list-stack-resources \
   --stack-name "$STACK" \
@@ -90,7 +112,9 @@ if [[ -z "$cluster_arn" || "$cluster_arn" == "None" ]]; then
   echo "ECS cluster not found in stack $STACK."
   exit 1
 fi
-echo "Resolved cluster: $cluster_arn"
+if [[ "$quiet" -ne 1 ]]; then
+  echo "Resolved cluster: $cluster_arn"
+fi
 
 service_arn="$(aws_cmd cloudformation list-stack-resources \
   --stack-name "$STACK" \
@@ -104,7 +128,9 @@ if [[ -z "$service_arn" || "$service_arn" == "None" ]]; then
   echo "API service not found in stack $STACK."
   exit 1
 fi
-echo "Resolved service: $service_arn"
+if [[ "$quiet" -ne 1 ]]; then
+  echo "Resolved service: $service_arn"
+fi
 
 exec_enabled="$(aws_cmd ecs describe-services \
   --cluster "$cluster_arn" \
