@@ -60,9 +60,7 @@ def fetch_price_history(conn, start_date: date):
             """
             SELECT t.snapshot_date, t.asset_id, t.variant, t.market
             FROM tcgplayer_price_snapshot t
-            JOIN tracked_asset ta ON ta.asset_id = t.asset_id
-            WHERE ta.is_active = true
-              AND t.snapshot_date >= %s
+            WHERE t.snapshot_date >= %s
               AND t.market IS NOT NULL
               AND t.market > %s
             ORDER BY t.asset_id, t.variant, t.snapshot_date;

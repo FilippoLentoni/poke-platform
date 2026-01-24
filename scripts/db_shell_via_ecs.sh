@@ -83,9 +83,8 @@ fi\n\
 \n\
 psql_cmd() { PGPASSWORD=\"$DB_PASSWORD\" psql -h \"$DB_HOST\" -p \"$DB_PORT\" -U \"$DB_USER\" -d \"$DB_NAME\" -t -A -c \"$1\"; }\n\
 \n\
-echo \"tracked_asset_active=$(psql_cmd \"SELECT COUNT(*) FROM tracked_asset WHERE is_active=true;\")\"\n\
 echo \"card_metadata_count=$(psql_cmd \"SELECT COUNT(*) FROM card_metadata;\")\"\n\
-echo \"card_metadata_max_updated_ts=$(psql_cmd \"SELECT MAX(updated_ts) FROM card_metadata;\")\"\n\
+echo \"card_metadata_latest_snapshot=$(psql_cmd \"SELECT MAX(snapshot_date) FROM card_metadata;\")\"\n\
 \''
 
 aws_cmd ecs execute-command \

@@ -1,5 +1,4 @@
 import os
-import uuid
 from datetime import datetime, date
 
 import psycopg2
@@ -48,20 +47,10 @@ def ensure_schema(conn):
     with conn.cursor() as cur:
         cur.execute(
             """
-        CREATE TABLE IF NOT EXISTS tracked_asset (
-            asset_id TEXT PRIMARY KEY,
-            is_active BOOLEAN NOT NULL DEFAULT true,
-            added_reason TEXT NOT NULL DEFAULT 'new_expansion',
-            added_ts TIMESTAMPTZ NOT NULL DEFAULT now(),
-            tags JSONB NOT NULL DEFAULT '{}'::jsonb
-        );
-        """
-        )
-        cur.execute(
-            """
         CREATE TABLE IF NOT EXISTS card_metadata (
-            asset_id TEXT PRIMARY KEY,
-            ptcg_card_id TEXT UNIQUE,
+            asset_id TEXT NOT NULL,
+            snapshot_date DATE NOT NULL,
+            ptcg_card_id TEXT,
             name TEXT,
             set_id TEXT,
             set_name TEXT,
@@ -71,20 +60,15 @@ def ensure_schema(conn):
             artist TEXT NULL,
             images_json JSONB NULL,
             raw_json JSONB NULL,
-            updated_ts TIMESTAMPTZ NOT NULL DEFAULT now()
+            updated_ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+            PRIMARY KEY (asset_id, snapshot_date)
         );
         """
         )
         cur.execute(
             """
-        CREATE TABLE IF NOT EXISTS universe_run (
-            run_id UUID PRIMARY KEY,
-            ts_started TIMESTAMPTZ NOT NULL DEFAULT now(),
-            ts_finished TIMESTAMPTZ NULL,
-            note TEXT NULL,
-            new_sets INT NOT NULL DEFAULT 0,
-            new_cards INT NOT NULL DEFAULT 0
-        );
+        CREATE INDEX IF NOT EXISTS idx_card_metadata_asset_date
+          ON card_metadata(asset_id, snapshot_date DESC);
         """
         )
     conn.commit()
@@ -145,6 +129,7 @@ def parse_release_date(s: str):
 def upsert_card(conn, card: dict, set_release_date: date | None):
     ptcg_id = card.get("id")
     asset_id = f"ptcg:{ptcg_id}"
+    snapshot_date = date.today()
     name = card.get("name")
     set_obj = card.get("set", {}) or {}
     set_id = set_obj.get("id")
@@ -157,9 +142,12 @@ def upsert_card(conn, card: dict, set_release_date: date | None):
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO card_metadata(asset_id, ptcg_card_id, name, set_id, set_name, set_release_date, number, rarity, artist, images_json, raw_json)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            ON CONFLICT (asset_id) DO UPDATE SET
+            INSERT INTO card_metadata(
+              asset_id, snapshot_date, ptcg_card_id, name, set_id, set_name,
+              set_release_date, number, rarity, artist, images_json, raw_json
+            )
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (asset_id, snapshot_date) DO UPDATE SET
               name=EXCLUDED.name,
               set_id=EXCLUDED.set_id,
               set_name=EXCLUDED.set_name,
@@ -173,6 +161,7 @@ def upsert_card(conn, card: dict, set_release_date: date | None):
             """,
             (
                 asset_id,
+                snapshot_date,
                 ptcg_id,
                 name,
                 set_id,
@@ -186,28 +175,14 @@ def upsert_card(conn, card: dict, set_release_date: date | None):
             ),
         )
 
-        cur.execute(
-            """
-            INSERT INTO tracked_asset(asset_id, is_active, added_reason, tags)
-            VALUES (%s, true, 'new_expansion', %s)
-            ON CONFLICT (asset_id) DO UPDATE SET
-              is_active=true;
-            """,
-            (asset_id, Json({"set": set_id, "artist": artist, "rarity": rarity})),
-        )
-
 
 def main():
     conn = connect()
-    run_id = str(uuid.uuid4())
     new_sets = 0
     new_cards = 0
 
     try:
         ensure_schema(conn)
-        with conn.cursor() as cur:
-            cur.execute("INSERT INTO universe_run(run_id, note) VALUES (%s, %s);", (run_id, "started"))
-        conn.commit()
 
         sets = get_sets()
         print(f"Fetched {len(sets)} sets", flush=True)
@@ -242,14 +217,7 @@ def main():
                 print(f"Set {set_id} failed: {exc}", flush=True)
                 conn.rollback()
 
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE universe_run SET ts_finished=now(), note=%s, new_sets=%s, new_cards=%s WHERE run_id=%s;",
-                ("ok", new_sets, new_cards, run_id),
-            )
-        conn.commit()
-
-        print(f"Universe update done. run_id={run_id} new_sets={new_sets} new_cards={new_cards}")
+        print(f"Universe update done. new_sets={new_sets} new_cards={new_cards}")
 
     finally:
         conn.close()

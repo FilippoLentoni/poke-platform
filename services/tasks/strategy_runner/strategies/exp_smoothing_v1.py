@@ -17,9 +17,7 @@ def _fetch_price_history(conn, start_date: date) -> list[tuple]:
             """
             SELECT t.snapshot_date, t.asset_id, t.variant, t.market
             FROM tcgplayer_price_snapshot t
-            JOIN tracked_asset ta ON ta.asset_id = t.asset_id
-            WHERE ta.is_active = true
-              AND (ta.tags->>'rarity') ILIKE %s
+            WHERE (t.rarity) ILIKE %s
               AND t.snapshot_date >= %s
               AND t.market IS NOT NULL
               AND t.market > %s

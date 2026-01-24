@@ -10,7 +10,7 @@ aws_cmd() {
 
 usage() {
   echo "Usage: $0 <task>"
-  echo "Tasks: universe_updater | price_extractor | strategy_runner | proposal_generator"
+  echo "Tasks: universe_updater | price_extractor | strategy_runner | s3_exporter"
 }
 
 if [[ $# -lt 1 ]]; then
@@ -23,7 +23,7 @@ case "$task" in
   universe_updater) logical_rule="UniverseUpdaterDailyRule" ;;
   price_extractor) logical_rule="PriceExtractorDailyRule" ;;
   strategy_runner) logical_rule="StrategyRunnerDailyRule" ;;
-  proposal_generator) logical_rule="ProposalGeneratorDailyRule" ;;
+  s3_exporter) logical_rule="S3ExporterDailyRule" ;;
   *) usage; exit 1 ;;
 esac
 

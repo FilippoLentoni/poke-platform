@@ -38,6 +38,15 @@ def ensure_tables(conn):
           snapshot_date      DATE        NOT NULL,
           snapshot_ts        TIMESTAMPTZ NOT NULL DEFAULT now(),
           asset_id           TEXT        NOT NULL,
+          ptcg_card_id       TEXT        NULL,
+          name               TEXT        NULL,
+          set_id             TEXT        NULL,
+          set_name           TEXT        NULL,
+          set_release_date   DATE        NULL,
+          number             TEXT        NULL,
+          rarity             TEXT        NULL,
+          artist             TEXT        NULL,
+          images_json        JSONB       NULL,
           variant            TEXT        NOT NULL,
           currency           TEXT        NOT NULL DEFAULT 'USD',
           market             NUMERIC     NULL,
@@ -65,6 +74,15 @@ def ensure_tables(conn):
           snapshot_date      DATE        NOT NULL,
           snapshot_ts        TIMESTAMPTZ NOT NULL DEFAULT now(),
           asset_id           TEXT        NOT NULL,
+          ptcg_card_id       TEXT        NULL,
+          name               TEXT        NULL,
+          set_id             TEXT        NULL,
+          set_name           TEXT        NULL,
+          set_release_date   DATE        NULL,
+          number             TEXT        NULL,
+          rarity             TEXT        NULL,
+          artist             TEXT        NULL,
+          images_json        JSONB       NULL,
           variant            TEXT        NOT NULL DEFAULT 'default',
           currency           TEXT        NOT NULL DEFAULT 'EUR',
           avg1               NUMERIC     NULL,
@@ -110,7 +128,7 @@ def parse_raw_json(raw: Any) -> Dict[str, Any]:
     return {}
 
 
-def upsert_tcgplayer(cur, asset_id: str, tcg: Dict[str, Any]):
+def upsert_tcgplayer(cur, asset_id: str, meta: Dict[str, Any], tcg: Dict[str, Any]):
     url = tcg.get("url")
     updated_at = tcg.get("updatedAt")
     prices = tcg.get("prices") or {}
@@ -120,10 +138,21 @@ def upsert_tcgplayer(cur, asset_id: str, tcg: Dict[str, Any]):
         cur.execute(
             """
             INSERT INTO tcgplayer_price_snapshot(
-              snapshot_date, asset_id, variant, market, low, mid, high, direct_low, url, source_updated_at, extra
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+              snapshot_date, asset_id, ptcg_card_id, name, set_id, set_name, set_release_date,
+              number, rarity, artist, images_json, variant, market, low, mid, high, direct_low,
+              url, source_updated_at, extra
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (snapshot_date, asset_id, variant) DO UPDATE SET
               snapshot_ts=now(),
+              ptcg_card_id=EXCLUDED.ptcg_card_id,
+              name=EXCLUDED.name,
+              set_id=EXCLUDED.set_id,
+              set_name=EXCLUDED.set_name,
+              set_release_date=EXCLUDED.set_release_date,
+              number=EXCLUDED.number,
+              rarity=EXCLUDED.rarity,
+              artist=EXCLUDED.artist,
+              images_json=EXCLUDED.images_json,
               market=EXCLUDED.market,
               low=EXCLUDED.low,
               mid=EXCLUDED.mid,
@@ -136,6 +165,15 @@ def upsert_tcgplayer(cur, asset_id: str, tcg: Dict[str, Any]):
             (
                 SNAPSHOT_DATE,
                 asset_id,
+                meta.get("ptcg_card_id"),
+                meta.get("name"),
+                meta.get("set_id"),
+                meta.get("set_name"),
+                meta.get("set_release_date"),
+                meta.get("number"),
+                meta.get("rarity"),
+                meta.get("artist"),
+                PgJson(meta.get("images_json")) if meta.get("images_json") is not None else None,
                 variant,
                 to_num(v.get("market")),
                 to_num(v.get("low")),
@@ -149,7 +187,7 @@ def upsert_tcgplayer(cur, asset_id: str, tcg: Dict[str, Any]):
         )
 
 
-def upsert_cardmarket(cur, asset_id: str, cm: Dict[str, Any]):
+def upsert_cardmarket(cur, asset_id: str, meta: Dict[str, Any], cm: Dict[str, Any]):
     url = cm.get("url")
     updated_at = cm.get("updatedAt")
     prices = cm.get("prices") or {}
@@ -159,10 +197,21 @@ def upsert_cardmarket(cur, asset_id: str, cm: Dict[str, Any]):
     cur.execute(
         """
         INSERT INTO cardmarket_price_snapshot(
-          snapshot_date, asset_id, variant, avg1, avg7, avg30, low_price, trend_price, url, source_updated_at, extra
-        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+          snapshot_date, asset_id, ptcg_card_id, name, set_id, set_name, set_release_date,
+          number, rarity, artist, images_json, variant, avg1, avg7, avg30, low_price, trend_price,
+          url, source_updated_at, extra
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         ON CONFLICT (snapshot_date, asset_id, variant) DO UPDATE SET
           snapshot_ts=now(),
+          ptcg_card_id=EXCLUDED.ptcg_card_id,
+          name=EXCLUDED.name,
+          set_id=EXCLUDED.set_id,
+          set_name=EXCLUDED.set_name,
+          set_release_date=EXCLUDED.set_release_date,
+          number=EXCLUDED.number,
+          rarity=EXCLUDED.rarity,
+          artist=EXCLUDED.artist,
+          images_json=EXCLUDED.images_json,
           avg1=EXCLUDED.avg1,
           avg7=EXCLUDED.avg7,
           avg30=EXCLUDED.avg30,
@@ -175,6 +224,15 @@ def upsert_cardmarket(cur, asset_id: str, cm: Dict[str, Any]):
         (
             SNAPSHOT_DATE,
             asset_id,
+            meta.get("ptcg_card_id"),
+            meta.get("name"),
+            meta.get("set_id"),
+            meta.get("set_name"),
+            meta.get("set_release_date"),
+            meta.get("number"),
+            meta.get("rarity"),
+            meta.get("artist"),
+            PgJson(meta.get("images_json")) if meta.get("images_json") is not None else None,
             "default",
             to_num(prices.get("avg1")),
             to_num(prices.get("avg7")),
@@ -198,10 +256,21 @@ def upsert_cardmarket(cur, asset_id: str, cm: Dict[str, Any]):
         cur.execute(
             """
             INSERT INTO cardmarket_price_snapshot(
-              snapshot_date, asset_id, variant, avg1, avg7, avg30, low_price, trend_price, url, source_updated_at, extra
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+          snapshot_date, asset_id, ptcg_card_id, name, set_id, set_name, set_release_date,
+          number, rarity, artist, images_json, variant, avg1, avg7, avg30, low_price, trend_price,
+          url, source_updated_at, extra
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (snapshot_date, asset_id, variant) DO UPDATE SET
               snapshot_ts=now(),
+              ptcg_card_id=EXCLUDED.ptcg_card_id,
+              name=EXCLUDED.name,
+              set_id=EXCLUDED.set_id,
+              set_name=EXCLUDED.set_name,
+              set_release_date=EXCLUDED.set_release_date,
+              number=EXCLUDED.number,
+              rarity=EXCLUDED.rarity,
+              artist=EXCLUDED.artist,
+              images_json=EXCLUDED.images_json,
               avg1=EXCLUDED.avg1,
               avg7=EXCLUDED.avg7,
               avg30=EXCLUDED.avg30,
@@ -214,6 +283,15 @@ def upsert_cardmarket(cur, asset_id: str, cm: Dict[str, Any]):
             (
                 SNAPSHOT_DATE,
                 asset_id,
+                meta.get("ptcg_card_id"),
+                meta.get("name"),
+                meta.get("set_id"),
+                meta.get("set_name"),
+                meta.get("set_release_date"),
+                meta.get("number"),
+                meta.get("rarity"),
+                meta.get("artist"),
+                PgJson(meta.get("images_json")) if meta.get("images_json") is not None else None,
                 "reverseHolo",
                 to_num(prices.get("reverseHoloAvg1")),
                 to_num(prices.get("reverseHoloAvg7")),
@@ -235,10 +313,34 @@ def main():
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT ta.asset_id, cm.raw_json
-                FROM tracked_asset ta
-                JOIN card_metadata cm ON cm.asset_id = ta.asset_id
-                WHERE ta.is_active = true;
+                WITH latest_metadata AS (
+                    SELECT DISTINCT ON (asset_id)
+                        asset_id,
+                        raw_json,
+                        ptcg_card_id,
+                        name,
+                        set_id,
+                        set_name,
+                        set_release_date,
+                        number,
+                        rarity,
+                        artist,
+                        images_json
+                    FROM card_metadata
+                    ORDER BY asset_id, snapshot_date DESC, updated_ts DESC
+                )
+                SELECT lm.asset_id,
+                       lm.raw_json,
+                       lm.ptcg_card_id,
+                       lm.name,
+                       lm.set_id,
+                       lm.set_name,
+                       lm.set_release_date,
+                       lm.number,
+                       lm.rarity,
+                       lm.artist,
+                       lm.images_json
+                FROM latest_metadata lm;
                 """
             )
             rows = cur.fetchall()
@@ -248,17 +350,41 @@ def main():
         cm_rows = 0
 
         with conn.cursor() as cur:
-            for asset_id, raw in rows:
+            for row in rows:
+                (
+                    asset_id,
+                    raw,
+                    ptcg_card_id,
+                    name,
+                    set_id,
+                    set_name,
+                    set_release_date,
+                    number,
+                    rarity,
+                    artist,
+                    images_json,
+                ) = row
+                meta = {
+                    "ptcg_card_id": ptcg_card_id,
+                    "name": name,
+                    "set_id": set_id,
+                    "set_name": set_name,
+                    "set_release_date": set_release_date,
+                    "number": number,
+                    "rarity": rarity,
+                    "artist": artist,
+                    "images_json": images_json,
+                }
                 doc = parse_raw_json(raw)
 
                 tcg = doc.get("tcgplayer")
                 if isinstance(tcg, dict) and isinstance(tcg.get("prices"), dict):
-                    upsert_tcgplayer(cur, asset_id, tcg)
+                    upsert_tcgplayer(cur, asset_id, meta, tcg)
                     tcg_rows += 1
 
                 cm = doc.get("cardmarket")
                 if isinstance(cm, dict) and isinstance(cm.get("prices"), dict):
-                    upsert_cardmarket(cur, asset_id, cm)
+                    upsert_cardmarket(cur, asset_id, meta, cm)
                     cm_rows += 1
 
             conn.commit()

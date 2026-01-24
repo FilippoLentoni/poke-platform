@@ -10,7 +10,7 @@ aws_cmd() {
 
 usage() {
   echo "Usage: $0 <component>"
-  echo "Components: universe_updater | price_extractor | strategy_runner | proposal_generator | api | ui"
+  echo "Components: universe_updater | price_extractor | strategy_runner | s3-exporter | api | ui"
   echo "Optional: LOG_GROUP=/aws/ecs/... to override discovery"
 }
 

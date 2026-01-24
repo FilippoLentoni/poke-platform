@@ -12,10 +12,10 @@ aws_cmd() {
 usage() {
   echo "Usage: $0 (-f <sql_file> | -q <sql>) [--csv] [--quiet]"
   echo "Examples:"
-  echo "  $0 -q \"SELECT COUNT(*) FROM tracked_asset WHERE is_active=true;\""
+  echo "  $0 -q \"SELECT COUNT(*) FROM card_metadata;\""
   echo "  $0 -f scripts/db_checks.sql"
   echo "  cat queries.sql | $0 -f -"
-  echo "  $0 --csv --quiet -q \"SELECT * FROM tracked_asset LIMIT 5;\""
+  echo "  $0 --csv --quiet -q \"SELECT * FROM card_metadata LIMIT 5;\""
 }
 
 sql_content=""

@@ -12,6 +12,7 @@ from aws_cdk import (
     aws_iam as iam,
     aws_logs as logs,
     aws_rds as rds,
+    aws_s3 as s3,
     aws_secretsmanager as secretsmanager,
 )
 
@@ -35,6 +36,16 @@ class PlatformStack(Stack):
         )
         price_repo = ecr.Repository(
             self, "PriceExtractorRepo", repository_name="poke-price-extractor"
+        )
+        export_repo = ecr.Repository(
+            self, "S3ExporterRepo", repository_name="poke-s3-exporter"
+        )
+
+        data_bucket = s3.Bucket(
+            self,
+            "DataBucket",
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            encryption=s3.BucketEncryption.S3_MANAGED,
         )
 
         # Postgres (RDS)
@@ -252,6 +263,39 @@ class PlatformStack(Stack):
             vpc=vpc,
             description="Security group for price extractor tasks",
         )
+        export_log_group = logs.LogGroup(
+            self,
+            "S3ExporterLogGroup",
+            retention=logs.RetentionDays.ONE_WEEK,
+        )
+        export_task_def = ecs.FargateTaskDefinition(
+            self, "S3ExporterTaskDef", cpu=512, memory_limit_mib=1024
+        )
+        export_task_def.add_container(
+            "S3ExporterContainer",
+            image=ecs.ContainerImage.from_ecr_repository(export_repo, tag="latest"),
+            environment={
+                "DB_HOST": db.db_instance_endpoint_address,
+                "DB_PORT": str(db.db_instance_endpoint_port),
+                "DB_NAME": "poke",
+                "DB_USER": "pokeadmin",
+                "S3_BUCKET": data_bucket.bucket_name,
+                "S3_PREFIX": "snapshots",
+            },
+            secrets={
+                "DB_PASSWORD": ecs.Secret.from_secrets_manager(db.secret, field="password"),
+            },
+            logging=ecs.LogDrivers.aws_logs(
+                stream_prefix="s3-exporter",
+                log_group=export_log_group,
+            ),
+        )
+        export_sg = ec2.SecurityGroup(
+            self,
+            "S3ExporterSecurityGroup",
+            vpc=vpc,
+            description="Security group for S3 exporter tasks",
+        )
 
         # Networking rules
         db.connections.allow_default_port_from(api_service, "API to Postgres")
@@ -266,6 +310,9 @@ class PlatformStack(Stack):
         )
         db.connections.allow_default_port_from(
             price_sg, "Price extractor to Postgres"
+        )
+        db.connections.allow_default_port_from(
+            export_sg, "S3 exporter to Postgres"
         )
         api_service.connections.allow_from(
             ui_service.load_balancer, ec2.Port.tcp(8000), "ALB to API"
@@ -498,9 +545,64 @@ class PlatformStack(Stack):
             ],
         )
 
+        export_rule_role = iam.Role(
+            self,
+            "S3ExporterRuleRole",
+            assumed_by=iam.ServicePrincipal("events.amazonaws.com"),
+        )
+        export_rule_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["ecs:RunTask"],
+                resources=[export_task_def.task_definition_arn],
+                conditions={"ArnLike": {"ecs:cluster": cluster.cluster_arn}},
+            )
+        )
+        export_pass_role_arns = []
+        if export_task_def.execution_role:
+            export_pass_role_arns.append(export_task_def.execution_role.role_arn)
+        if export_task_def.task_role:
+            export_pass_role_arns.append(export_task_def.task_role.role_arn)
+        if export_pass_role_arns:
+            export_rule_role.add_to_policy(
+                iam.PolicyStatement(
+                    actions=["iam:PassRole"],
+                    resources=export_pass_role_arns,
+                )
+            )
+        data_bucket.grant_write(export_task_def.task_role)
+
+        events.CfnRule(
+            self,
+            "S3ExporterDailyRule",
+            # EventBridge Rules use UTC; 13:10 UTC == 08:10 America/New_York (standard time).
+            schedule_expression="cron(10 13 * * ? *)",
+            state="ENABLED",
+            targets=[
+                events.CfnRule.TargetProperty(
+                    arn=cluster.cluster_arn,
+                    id="S3ExporterEcsTarget",
+                    role_arn=export_rule_role.role_arn,
+                    ecs_parameters=events.CfnRule.EcsParametersProperty(
+                        task_definition_arn=export_task_def.task_definition_arn,
+                        task_count=1,
+                        launch_type="FARGATE",
+                        network_configuration=events.CfnRule.NetworkConfigurationProperty(
+                            aws_vpc_configuration=events.CfnRule.AwsVpcConfigurationProperty(
+                                subnets=proposal_subnets.subnet_ids,
+                                security_groups=[export_sg.security_group_id],
+                                assign_public_ip="DISABLED",
+                            )
+                        ),
+                    ),
+                )
+            ],
+        )
+
         CfnOutput(self, "AlbUrl", value=f"http://{alb_dns}")
         CfnOutput(self, "ApiRepoUri", value=api_repo.repository_uri)
         CfnOutput(self, "UiRepoUri", value=ui_repo.repository_uri)
         CfnOutput(self, "UniverseUpdaterRepoUri", value=universe_repo.repository_uri)
         CfnOutput(self, "PriceExtractorRepoUri", value=price_repo.repository_uri)
+        CfnOutput(self, "S3ExporterRepoUri", value=export_repo.repository_uri)
+        CfnOutput(self, "DataBucketName", value=data_bucket.bucket_name)
         CfnOutput(self, "DbEndpoint", value=db.db_instance_endpoint_address)
