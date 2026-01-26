@@ -1,8 +1,12 @@
+import json
 import os
+import uuid
 from datetime import date
 from typing import Optional, Dict, Any, List
 
-from fastapi import FastAPI
+import boto3
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from psycopg2.pool import SimpleConnectionPool
 import psycopg2
 
@@ -14,6 +18,23 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 app = FastAPI(title="Poke Platform API")
 _pool: Optional[SimpleConnectionPool] = None
+_agentcore_client = boto3.client(
+    "bedrock-agentcore", region_name=os.getenv("AWS_REGION", "us-east-1")
+)
+
+
+class ChatRequest(BaseModel):
+    user_id: str
+    message: str
+    session_id: Optional[str] = None
+    trace_id: Optional[str] = None
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    session_id: str
+    trace_id: str
+    raw: Optional[Dict[str, Any]] = None
 
 def db_enabled() -> bool:
     return all([DB_HOST, DB_USER, DB_PASSWORD])
@@ -51,6 +72,14 @@ def startup():
 @app.get("/api/health")
 def health():
     return {"ok": True, "service": "api", "db": db_enabled()}
+
+
+def _read_streaming_body(body) -> str:
+    chunks: List[bytes] = []
+    for chunk in body.iter_chunks():
+        if chunk:
+            chunks.append(chunk)
+    return b"".join(chunks).decode("utf-8", errors="replace")
 
 def _fetch_valuations(order: str, limit: int, strategy_name: Optional[str], strategy_version: Optional[str]):
     pool = get_pool()
@@ -137,3 +166,53 @@ def valuations_overvalued(limit: int = 10, strategy_name: Optional[str] = None, 
     if not db_enabled():
         return {"valuations": [], "note": "DB not configured"}
     return _fetch_valuations("ASC", limit, strategy_name, strategy_version)
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+def chat(req: ChatRequest):
+    agent_runtime_arn = os.getenv("AGENTCORE_AGENT_RUNTIME_ARN")
+    if not agent_runtime_arn:
+        raise HTTPException(
+            status_code=500,
+            detail="Missing env var AGENTCORE_AGENT_RUNTIME_ARN",
+        )
+
+    session_id = req.session_id or str(uuid.uuid4())
+    trace_id = req.trace_id or str(uuid.uuid4())
+
+    payload = {"prompt": req.message}
+
+    try:
+        resp = _agentcore_client.invoke_agent_runtime(
+            agentRuntimeArn=agent_runtime_arn,
+            runtimeSessionId=session_id,
+            traceId=trace_id,
+            contentType="application/json",
+            accept="application/json",
+            payload=bytes(json.dumps(payload), "utf-8"),
+            qualifier=os.getenv("AGENTCORE_QUALIFIER", "DEFAULT"),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    stream = resp.get("response")
+    if stream is None:
+        raise HTTPException(status_code=500, detail="No response body returned")
+
+    text = _read_streaming_body(stream)
+
+    reply = text
+    raw_obj: Optional[Dict[str, Any]] = None
+    try:
+        raw_obj = json.loads(text)
+        if isinstance(raw_obj, dict) and "response" in raw_obj:
+            reply = str(raw_obj["response"])
+    except Exception:
+        raw_obj = None
+
+    return ChatResponse(
+        reply=reply,
+        session_id=session_id,
+        trace_id=resp.get("traceId", trace_id),
+        raw=raw_obj,
+    )

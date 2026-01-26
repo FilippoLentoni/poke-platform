@@ -1,4 +1,5 @@
 import os
+import uuid
 import requests
 import streamlit as st
 
@@ -24,7 +25,7 @@ def valuation_params() -> dict:
     return params
 
 
-tab_market, tab_portfolio = st.tabs(["Market Opportunities", "Portfolio"])
+tab_market, tab_portfolio, tab_chat = st.tabs(["Market Opportunities", "Portfolio", "Chat"])
 
 with tab_market:
     if st.button("Seed demo proposals"):
@@ -138,3 +139,49 @@ with tab_portfolio:
         )
     else:
         st.info("No holdings recorded yet.")
+
+with tab_chat:
+    st.subheader("Ask the trading assistant")
+    user_id = st.text_input("User ID", value="trader")
+
+    if "chat_messages" not in st.session_state:
+        st.session_state.chat_messages = []
+    if "chat_session_id" not in st.session_state:
+        st.session_state.chat_session_id = str(uuid.uuid4())
+
+    for message in st.session_state.chat_messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    prompt = st.chat_input("Ask about prices, trends, or proposals...")
+    if prompt:
+        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        try:
+            resp = requests.post(
+                f"{API_BASE}/api/chat",
+                json={
+                    "user_id": user_id,
+                    "message": prompt,
+                    "session_id": st.session_state.chat_session_id,
+                },
+                timeout=60,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            st.session_state.chat_session_id = data.get(
+                "session_id", st.session_state.chat_session_id
+            )
+            reply = data.get("reply", "No response returned.")
+            trace_id = data.get("trace_id")
+        except Exception as exc:
+            reply = f"Chat service error: {exc}"
+            trace_id = None
+
+        st.session_state.chat_messages.append({"role": "assistant", "content": reply})
+        with st.chat_message("assistant"):
+            st.markdown(reply)
+            if trace_id:
+                st.caption(f"Trace: {trace_id}")

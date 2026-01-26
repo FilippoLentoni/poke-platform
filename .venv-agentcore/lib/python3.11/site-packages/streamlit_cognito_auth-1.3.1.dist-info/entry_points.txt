@@ -1,0 +1,2 @@
+[console_scripts]
+hello = streamlit_cognito_auth:hello

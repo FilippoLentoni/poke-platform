@@ -67,6 +67,22 @@ def ensure_schema(conn):
         )
         cur.execute(
             """
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON c.conrelid = t.oid
+        WHERE t.relname = 'card_metadata'
+          AND c.contype = 'p';
+        """
+        )
+        if cur.fetchone() is None:
+            cur.execute(
+                """
+            ALTER TABLE card_metadata
+            ADD CONSTRAINT card_metadata_pkey PRIMARY KEY (asset_id, snapshot_date);
+            """
+            )
+        cur.execute(
+            """
         CREATE INDEX IF NOT EXISTS idx_card_metadata_asset_date
           ON card_metadata(asset_id, snapshot_date DESC);
         """

@@ -1,0 +1,60 @@
+default_agent: pokemon_trader_agent
+agents:
+  pokemon_trader_agent:
+    name: pokemon_trader_agent
+    entrypoint: /home/ec2-user/projects/poke-platform/.agentcore_runtime_build/agents/orchestration_agent/agent.py
+    deployment_type: container
+    runtime_type: null
+    platform: linux/arm64
+    container_runtime: docker
+    source_path: /home/ec2-user/projects/poke-platform/.agentcore_runtime_build
+    aws:
+      execution_role: arn:aws:iam::878817878019:role/pokemon_trader_agent-AgentCoreRuntimeRole-us-east-2
+      execution_role_auto_create: false
+      account: '878817878019'
+      region: us-east-2
+      ecr_repository: 878817878019.dkr.ecr.us-east-2.amazonaws.com/bedrock-agentcore-pokemon_trader_agent
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: pokemon_trader_agent-FbuGwOCP8y
+      agent_arn: arn:aws:bedrock-agentcore:us-east-2:878817878019:runtime/pokemon_trader_agent-FbuGwOCP8y
+      agent_session_id: null
+    codebuild:
+      project_name: bedrock-agentcore-pokemon_trader_agent-builder
+      execution_role: arn:aws:iam::878817878019:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-2-c5f08d456f
+      source_bucket: bedrock-agentcore-codebuild-sources-878817878019-us-east-2
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false

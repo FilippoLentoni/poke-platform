@@ -1,6 +1,7 @@
 from constructs import Construct
 from aws_cdk import (
     Stack,
+    CfnParameter,
     CfnOutput,
     Duration,
     aws_ec2 as ec2,
@@ -22,6 +23,14 @@ class PlatformStack(Stack):
 
         vpc = ec2.Vpc(self, "Vpc", max_azs=2)
         cluster = ecs.Cluster(self, "Cluster", vpc=vpc)
+
+        agentcore_runtime_arn = CfnParameter(
+            self,
+            "AgentCoreRuntimeArn",
+            type="String",
+            description="AgentCore Runtime ARN for the chatbot backend.",
+            default="",
+        )
 
         api_repo = ecr.Repository(self, "ApiRepo", repository_name="poke-api")
         ui_repo = ecr.Repository(self, "UiRepo", repository_name="poke-ui")
@@ -93,6 +102,7 @@ class PlatformStack(Stack):
             ),
             health_check_grace_period=Duration.seconds(60),
         )
+        ui_service.load_balancer.set_attribute("idle_timeout.timeout_seconds", "120")
 
         # API service (behind same ALB via /api/*)
         api_task_def = ecs.FargateTaskDefinition(
@@ -113,6 +123,8 @@ class PlatformStack(Stack):
                 "DB_PORT": str(db.db_instance_endpoint_port),
                 "DB_NAME": "poke",
                 "DB_USER": "pokeadmin",
+                "AGENTCORE_AGENT_RUNTIME_ARN": agentcore_runtime_arn.value_as_string,
+                "AWS_REGION": Stack.of(self).region,
             },
             secrets={
                 "DB_PASSWORD": ecs.Secret.from_secrets_manager(db.secret, field="password"),
@@ -121,6 +133,16 @@ class PlatformStack(Stack):
                 stream_prefix="api",
                 log_group=api_log_group,
             ),
+        )
+
+        api_task_def.task_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["bedrock-agentcore:InvokeAgentRuntime"],
+                resources=[
+                    agentcore_runtime_arn.value_as_string,
+                    f"{agentcore_runtime_arn.value_as_string}/runtime-endpoint/*",
+                ],
+            )
         )
 
         api_service = ecs.FargateService(
