@@ -9,7 +9,10 @@ from strands import Agent, tool
 from strands.models import BedrockModel
 from strands.telemetry import StrandsTelemetry
 
-from agents.data_agent.agent import build_data_agent
+from agents.data_agent.db_tools import (
+    load_postgres_config_from_env,
+    fetch_price_history_from_postgres,
+)
 from observability.langfuse_client import load_langfuse_config_from_env, PromptProvider
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -59,7 +62,12 @@ def _build_orchestrator(region: str) -> Agent:
         "BEDROCK_MODEL_ID",
         "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     )
-    model = BedrockModel(model_id=model_id, region_name=region, temperature=0.2)
+    model = BedrockModel(
+        model_id=model_id,
+        region_name=region,
+        temperature=0.2,
+        streaming=False,
+    )
 
     lf_cfg = load_langfuse_config_from_env()
     if lf_cfg:
@@ -72,8 +80,6 @@ def _build_orchestrator(region: str) -> Agent:
     else:
         system_prompt = DEFAULT_ORCH_PROMPT
 
-    data_agent = build_data_agent(region=region)
-
     @tool
     def fetch_price_history(
         card_name: str,
@@ -83,20 +89,52 @@ def _build_orchestrator(region: str) -> Agent:
         limit: int = 365,
     ) -> str:
         """
-        Fetch historical price series for a card by delegating to the Data Agent.
+        Fetch historical price series for a card.
 
-        Returns: a JSON string from the data agent.
+        Returns: a JSON string.
         """
-        prompt = (
-            "Return JSON ONLY. "
-            f"Get price history for card_name={card_name!r}, market={market!r}, "
-            f"start_date={start_date!r}, end_date={end_date!r}, limit={limit}."
-        )
-        resp = data_agent(prompt)
+        import json
+
+        pg_cfg = load_postgres_config_from_env()
+        if not pg_cfg:
+            return json.dumps(
+                {
+                    "card_name": card_name,
+                    "market": market,
+                    "prices": [],
+                    "source": "none",
+                    "error": "Postgres config missing (DB_HOST/DB_USER/DB_PASSWORD/DB_NAME).",
+                }
+            )
+
         try:
-            return resp.message["content"][0]["text"]
-        except Exception:
-            return str(resp)
+            prices = fetch_price_history_from_postgres(
+                pg_cfg,
+                card_name=card_name,
+                market=market,
+                start_date=start_date,
+                end_date=end_date,
+                limit=limit,
+            )
+        except Exception as exc:
+            return json.dumps(
+                {
+                    "card_name": card_name,
+                    "market": market,
+                    "prices": [],
+                    "source": "postgres",
+                    "error": f"Postgres query failed: {exc}",
+                }
+            )
+
+        return json.dumps(
+            {
+                "card_name": card_name,
+                "market": market,
+                "prices": prices,
+                "source": "postgres",
+            }
+        )
 
     @tool
     def fetch_fake_price_history(

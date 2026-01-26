@@ -37,7 +37,12 @@ def build_data_agent(region: str) -> Agent:
         "BEDROCK_MODEL_ID",
         "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     )
-    model = BedrockModel(model_id=model_id, region_name=region, temperature=0.0)
+    model = BedrockModel(
+        model_id=model_id,
+        region_name=region,
+        temperature=0.0,
+        streaming=False,
+    )
 
     lf_cfg = load_langfuse_config_from_env()
     if lf_cfg:

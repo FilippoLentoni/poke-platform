@@ -18,8 +18,13 @@ agents:
       s3_path: null
       s3_auto_create: false
       network_configuration:
-        network_mode: PUBLIC
-        network_mode_config: null
+        network_mode: VPC
+        network_mode_config:
+          security_groups:
+          - sg-0d7988ec622455a56
+          subnets:
+          - subnet-0bcb4459665bed9bc
+          - subnet-0cdb51e6612d6f894
       protocol_configuration:
         server_protocol: HTTP
       observability:
@@ -30,7 +35,7 @@ agents:
     bedrock_agentcore:
       agent_id: pokemon_trader_agent-FbuGwOCP8y
       agent_arn: arn:aws:bedrock-agentcore:us-east-2:878817878019:runtime/pokemon_trader_agent-FbuGwOCP8y
-      agent_session_id: null
+      agent_session_id: a634828e-f72d-4263-b207-e3a621098e48
     codebuild:
       project_name: bedrock-agentcore-pokemon_trader_agent-builder
       execution_role: arn:aws:iam::878817878019:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-2-c5f08d456f

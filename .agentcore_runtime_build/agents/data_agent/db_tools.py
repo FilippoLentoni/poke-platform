@@ -70,22 +70,44 @@ def fetch_price_history_from_postgres(
     if market != "cardmarket":
         return []
 
-    if end_date is None:
+    use_date_filter = start_date is not None or end_date is not None
+    if use_date_filter and end_date is None:
         end_date = dt.date.today().isoformat()
-    if start_date is None:
+    if use_date_filter and start_date is None:
         start_date = (dt.date.today() - dt.timedelta(days=365)).isoformat()
 
-    sql = """
-    SELECT
-      to_char(snapshot_date, 'YYYY-MM-DD') AS date,
-      COALESCE(trend_price, avg1, avg7, avg30) AS price,
-      currency AS currency
-    FROM cardmarket_price_snapshot
-    WHERE name ILIKE %(card_name)s
-      AND snapshot_date BETWEEN %(start_date)s::date AND %(end_date)s::date
-    ORDER BY snapshot_date ASC
-    LIMIT %(limit)s
-    """
+    if use_date_filter:
+        sql = """
+        SELECT
+          to_char(snapshot_date, 'YYYY-MM-DD') AS date,
+          COALESCE(trend_price, avg1, avg7, avg30) AS price,
+          currency AS currency
+        FROM cardmarket_price_snapshot
+        WHERE name ILIKE %(card_name)s
+          AND snapshot_date BETWEEN %(start_date)s::date AND %(end_date)s::date
+        ORDER BY snapshot_date ASC
+        LIMIT %(limit)s
+        """
+    else:
+        # No dates provided: return the most recent records (limited) in ascending order.
+        sql = """
+        SELECT
+          date,
+          price,
+          currency
+        FROM (
+          SELECT
+            snapshot_date,
+            to_char(snapshot_date, 'YYYY-MM-DD') AS date,
+            COALESCE(trend_price, avg1, avg7, avg30) AS price,
+            currency AS currency
+          FROM cardmarket_price_snapshot
+          WHERE name ILIKE %(card_name)s
+          ORDER BY snapshot_date DESC
+          LIMIT %(limit)s
+        ) AS recent
+        ORDER BY snapshot_date ASC
+        """
 
     params = dict(
         card_name=f"%{card_name}%",
