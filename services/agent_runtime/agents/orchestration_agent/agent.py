@@ -14,6 +14,7 @@ from agents.data_agent.db_tools import (
     fetch_price_history_from_postgres,
 )
 from observability.langfuse_client import load_langfuse_config_from_env, PromptProvider
+from observability.langfuse_tracing import trace_invocation, trace_step, update_trace, score_trace
 
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -235,15 +236,61 @@ def pokemon_trader_chat(payload: Dict[str, Any], context=None) -> Dict[str, Any]
 
         return {"response": json.dumps({"count": len(TOOL_NAMES), "tools": TOOL_NAMES})}
 
+    session_id = getattr(context, "session_id", None)
+    user_id = payload.get("user_id")
+    trace_id = getattr(context, "trace_id", None)
+
     if context is not None:
-        logger.info("[%s] prompt: %s", getattr(context, "session_id", "no-session"), prompt)
+        logger.info("[%s] prompt: %s", session_id or "no-session", prompt)
 
-    response = _ORCH_AGENT(prompt)
+    agent_name = payload.get("agent_name") or os.getenv("AGENT_NAME", "pokemon_trader_chat")
+    with trace_invocation(
+        name=str(agent_name),
+        user_id=str(user_id) if user_id else None,
+        session_id=str(session_id) if session_id else None,
+        input={"prompt": prompt},
+        metadata={"agentcore_trace_id": trace_id} if trace_id else None,
+    ):
+        with trace_step(
+            name="agent_reasoning",
+            as_type="chain",
+            input={"prompt": prompt},
+            metadata={"tool_count": len(TOOL_NAMES)},
+        ):
+            response = _ORCH_AGENT(prompt)
 
-    try:
-        text = response.message["content"][0]["text"]
-    except Exception:
-        text = str(response)
+        try:
+            text = response.message["content"][0]["text"]
+        except Exception:
+            text = str(response)
+
+        update_trace(
+            name=str(agent_name),
+            input={"prompt": prompt},
+            output={"response": text},
+            user_id=str(user_id) if user_id else None,
+            session_id=str(session_id) if session_id else None,
+            metadata={
+                "agentcore_trace_id": trace_id,
+                "agent_name": agent_name,
+                "model_id": os.getenv("BEDROCK_MODEL_ID"),
+                "tools": TOOL_NAMES,
+            }
+            if trace_id
+            else {
+                "agent_name": agent_name,
+                "model_id": os.getenv("BEDROCK_MODEL_ID"),
+                "tools": TOOL_NAMES,
+            },
+        )
+
+        if payload.get("score_name") is not None and payload.get("score_value") is not None:
+            score_trace(
+                name=str(payload.get("score_name")),
+                value=payload.get("score_value"),
+                data_type=payload.get("score_type"),
+                comment=payload.get("score_comment"),
+            )
 
     return {"response": text}
 

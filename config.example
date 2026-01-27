@@ -7,6 +7,7 @@ AWS_DEFAULT_REGION=us-east-2
 AGENTCORE_AGENT_RUNTIME_ARN=arn:aws:bedrock-agentcore:us-east-2:123456789012:runtime/pokemon_trader_agent-xxxx
 AGENTCORE_QUALIFIER=DEFAULT
 BEDROCK_MODEL_ID=global.amazon.nova-2-lite-v1:0
+AGENT_NAME=pokemon_trader_chat
 
 # Langfuse (Cloud)
 LANGFUSE_HOST=https://us.cloud.langfuse.com
@@ -26,6 +27,7 @@ OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64(public:secret)>
 DISABLE_ADOT_OBSERVABILITY=true
 # Filter out noisy health-check spans.
 OTEL_PYTHON_EXCLUDED_URLS=.*/ping.*
+OTEL_PYTHON_DISABLED_INSTRUMENTATIONS=fastapi,starlette,asgi
 
 # DB (API service)
 DB_HOST=...
