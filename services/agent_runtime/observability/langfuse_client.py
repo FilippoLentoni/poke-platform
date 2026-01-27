@@ -36,11 +36,19 @@ class PromptProvider:
                 "Langfuse SDK not installed. Add `langfuse` to requirements."
             )
         self._cfg = cfg
-        self._client = Langfuse(
-            public_key=cfg.public_key,
-            secret_key=cfg.secret_key,
-            base_url=cfg.base_url,
-        )
+        # Langfuse SDK renamed base_url -> host in v3.7.0.
+        try:
+            self._client = Langfuse(
+                public_key=cfg.public_key,
+                secret_key=cfg.secret_key,
+                host=cfg.base_url,
+            )
+        except TypeError:
+            self._client = Langfuse(
+                public_key=cfg.public_key,
+                secret_key=cfg.secret_key,
+                base_url=cfg.base_url,
+            )
         self._cache: Dict[str, Dict[str, Any]] = {}
 
     def _cache_key(self, name: str, label: str) -> str:

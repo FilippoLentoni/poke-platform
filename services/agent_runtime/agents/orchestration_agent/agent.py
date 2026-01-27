@@ -15,6 +15,7 @@ from agents.data_agent.db_tools import (
 )
 from observability.langfuse_client import load_langfuse_config_from_env, PromptProvider
 
+
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(os.getenv("AGENT_RUNTIME_LOG_LEVEL", "INFO").upper())

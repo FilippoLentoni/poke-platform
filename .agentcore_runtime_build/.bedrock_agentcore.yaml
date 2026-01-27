@@ -35,7 +35,7 @@ agents:
     bedrock_agentcore:
       agent_id: pokemon_trader_agent-FbuGwOCP8y
       agent_arn: arn:aws:bedrock-agentcore:us-east-2:878817878019:runtime/pokemon_trader_agent-FbuGwOCP8y
-      agent_session_id: a634828e-f72d-4263-b207-e3a621098e48
+      agent_session_id: null
     codebuild:
       project_name: bedrock-agentcore-pokemon_trader_agent-builder
       execution_role: arn:aws:iam::878817878019:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-2-c5f08d456f

@@ -128,3 +128,9 @@ REGION=us-east-2 ./scripts/tail_logs.sh ui
 ###
 how to query the db
 run_db_query.sh -q "SELECT cont(*) FROM card_metadata limit 10;"
+
+
+# ENV
+cd /home/ec2-user/projects/poke-platform
+. .venv311/bin/activate
+

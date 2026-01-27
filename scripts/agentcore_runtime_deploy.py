@@ -348,6 +348,53 @@ def launch_runtime(args: argparse.Namespace) -> None:
         key, value = item.split("=", 1)
         env_vars[key] = value
 
+    # Propagate model config from local env if provided.
+    bedrock_model_id = os.getenv("BEDROCK_MODEL_ID")
+    if bedrock_model_id and "BEDROCK_MODEL_ID" not in env_vars:
+        env_vars["BEDROCK_MODEL_ID"] = bedrock_model_id
+
+    # Pass DB config through when present (agent tools use DB_HOST/DB_USER/etc).
+    for key in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"):
+        val = os.getenv(key)
+        if val and key not in env_vars:
+            env_vars[key] = val
+
+    # Optional OTEL filters to avoid noisy spans (e.g., /ping health checks).
+    for key in ("OTEL_PYTHON_EXCLUDED_URLS", "OTEL_PYTHON_DISABLED_INSTRUMENTATIONS"):
+        val = os.getenv(key)
+        if val and key not in env_vars:
+            env_vars[key] = val
+
+    # Best-practice Langfuse OTEL wiring (matches AgentCore samples notebook).
+    langfuse_public = os.getenv("LANGFUSE_PUBLIC_KEY")
+    langfuse_secret = os.getenv("LANGFUSE_SECRET_KEY")
+    langfuse_host = os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL")
+    if langfuse_public and langfuse_secret:
+        if "LANGFUSE_PUBLIC_KEY" not in env_vars:
+            env_vars["LANGFUSE_PUBLIC_KEY"] = langfuse_public
+        if "LANGFUSE_SECRET_KEY" not in env_vars:
+            env_vars["LANGFUSE_SECRET_KEY"] = langfuse_secret
+        if langfuse_host and "LANGFUSE_BASE_URL" not in env_vars and "LANGFUSE_HOST" not in env_vars:
+            # Agent runtime uses BASE_URL for prompt fetch; SDK v3 uses HOST.
+            env_vars["LANGFUSE_BASE_URL"] = langfuse_host
+            env_vars["LANGFUSE_HOST"] = langfuse_host
+
+        if "OTEL_EXPORTER_OTLP_ENDPOINT" not in env_vars:
+            if not langfuse_host:
+                raise RuntimeError(
+                    "LANGFUSE_HOST or LANGFUSE_BASE_URL is required to build OTEL endpoint."
+                )
+            env_vars["OTEL_EXPORTER_OTLP_ENDPOINT"] = (
+                f"{langfuse_host.rstrip('/')}/api/public/otel"
+            )
+        if "OTEL_EXPORTER_OTLP_HEADERS" not in env_vars:
+            auth_token = base64.b64encode(
+                f"{langfuse_public}:{langfuse_secret}".encode()
+            ).decode()
+            env_vars["OTEL_EXPORTER_OTLP_HEADERS"] = f"Authorization=Basic {auth_token}"
+        # Disable ADOT so Langfuse is the active OTEL exporter.
+        env_vars.setdefault("DISABLE_ADOT_OBSERVABILITY", "true")
+
     config_path = Path(args.workspace).expanduser().resolve() / ".bedrock_agentcore.yaml"
     if config_path.exists():
         config_data = yaml.safe_load(config_path.read_text())
@@ -395,6 +442,9 @@ def invoke_runtime(args: argparse.Namespace) -> None:
 
 def status_runtime(args: argparse.Namespace) -> None:
     runtime = Runtime()
+    config_path = Path(args.workspace).expanduser().resolve() / ".bedrock_agentcore.yaml"
+    if config_path.exists():
+        runtime._config_path = config_path
     status_response = runtime.status()
     print(json.dumps(status_response, indent=2, default=str))
 

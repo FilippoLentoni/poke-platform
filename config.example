@@ -1,0 +1,35 @@
+## Poke Platform (example config file)
+## Copy to ./config and fill values. ./config is gitignored.
+
+# AWS / AgentCore Runtime
+AWS_REGION=us-east-2
+AWS_DEFAULT_REGION=us-east-2
+AGENTCORE_AGENT_RUNTIME_ARN=arn:aws:bedrock-agentcore:us-east-2:123456789012:runtime/pokemon_trader_agent-xxxx
+AGENTCORE_QUALIFIER=DEFAULT
+BEDROCK_MODEL_ID=global.amazon.nova-2-lite-v1:0
+
+# Langfuse (Cloud)
+LANGFUSE_HOST=https://us.cloud.langfuse.com
+LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+
+# Langfuse prompt management (optional)
+LANGFUSE_ORCH_PROMPT_NAME=pokemon-orchestrator-system
+LANGFUSE_DATA_PROMPT_NAME=pokemon-data-agent-system
+LANGFUSE_PROMPT_LABEL=production
+LANGFUSE_PROMPT_TTL=60
+
+# OTEL -> Langfuse
+OTEL_EXPORTER_OTLP_ENDPOINT=https://us.cloud.langfuse.com/api/public/otel
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64(public:secret)>
+DISABLE_ADOT_OBSERVABILITY=true
+# Filter out noisy health-check spans.
+OTEL_PYTHON_EXCLUDED_URLS=.*/ping.*
+
+# DB (API service)
+DB_HOST=...
+DB_PORT=5432
+DB_NAME=poke
+DB_USER=...
+DB_PASSWORD=...
