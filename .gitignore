@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.venv-agentcore/
+.venv-api/
+.venv311/
 
 # CDK
 infra/cdk/.venv/
