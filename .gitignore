@@ -16,3 +16,6 @@ infra/cdk/cdk.out/
 .env
 config
 *.pem
+
+# Local dependencies
+third_party/
